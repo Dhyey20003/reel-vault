@@ -1,0 +1,18 @@
+{
+  "observed_facts": ["Caption mentions a lake at sunset", "Creator's notes ask for a slow push-in opening"],
+  "core_idea": "A calm, cinematic sunset-over-water piece with one strong hook shot and a reveal.",
+  "opening_hook": "Tight close-up of water ripples with the sun reflected, 1.5 s, then a whip to the wide.",
+  "story_structure": "Hook (0-2s) -> establish place (2-7s) -> three detail beats (7-18s) -> reveal + title (18-24s).",
+  "shot_list": [
+    {"shot": "Ripple close-up", "description": "Handheld, low angle, sun in reflection", "duration_seconds": 2, "camera": "Phone, 2x"},
+    {"shot": "Wide establishing", "description": "Static tripod, lake and ghats", "duration_seconds": 4, "camera": "Mirrorless 24mm"},
+    {"shot": "Boat pass-by", "description": "Pan with a boat crossing frame", "duration_seconds": 4, "camera": "Gimbal"}
+  ],
+  "camera_approach": "Slow, deliberate moves; keep horizon level; expose for highlights.",
+  "editing_approach": "Cut on motion, 24 fps, gentle speed ramps on the pan.",
+  "sound_design": "Ambient water and birds under a soft piano bed; one riser into the reveal.",
+  "production_requirements": ["Tripod", "ND filter", "Arrive 45 min before sunset"],
+  "recreation_plan": "Scout the ghat the day before, shoot two evenings for safety.",
+  "personal_notes": "",
+  "confidence_note": "Only the caption and notes were available; no frames or transcript."
+}
