@@ -7,9 +7,10 @@ for %%V in (3.13 3.12) do (
     py -%%V -c "import sys" >nul 2>&1 && (set "PYEXE=py -%%V" & set "PYVER=%%V")
   )
 )
-if not defined PYEXE (
-  python -c "import sys; assert sys.version_info[:2] in ((3,12),(3,13))" >nul 2>&1 && (
-    set "PYEXE=python"
-    for /f %%i in ('python -c "import sys;print(f'{sys.version_info[0]}.{sys.version_info[1]}')"') do set "PYVER=%%i"
-  )
-)
+if defined PYEXE goto :done
+python -c "import sys; raise SystemExit(0 if sys.version_info[:2] in ((3,12),(3,13)) else 1)" >nul 2>&1
+if errorlevel 1 goto :done
+set "PYEXE=python"
+for /f "tokens=2 delims= " %%i in ('python --version 2^>^&1') do set "PYFULL=%%i"
+for /f "tokens=1,2 delims=." %%a in ("%PYFULL%") do set "PYVER=%%a.%%b"
+:done
