@@ -1,6 +1,6 @@
-# Windows manual checklist (ReelVault v1.0.0)
+# Manual checklist (ReelVault v1.0.0, Windows or macOS)
 
-Tick each item on a real Windows PC and a real Android phone. Record the result in `docs/TEST_RESULTS.md`.
+Tick each item on a real PC or Mac and a real Android phone. On macOS replace each `scripts\x.bat` with `bash scripts/x.sh` (`build_pc_exe.bat` is `build_pc_app.sh`), `Explorer` with Finder, and the data folder with `~/Library/Application Support/ReelVault/Data`. Record the result in `docs/TEST_RESULTS.md`.
 
 ## Setup
 - [ ] `scripts\setup.bat` completes with "[OK] Setup finished" on a PC with only Python installed (no internet needed).

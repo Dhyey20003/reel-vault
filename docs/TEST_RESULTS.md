@@ -9,7 +9,8 @@
 | Android `app` module unit tests (`CaptureRepositoryTest`, 7 tests) | needs Android SDK | **not run here** (SDK and Google Maven unreachable in the build environment) |
 | Android instrumented tests (`CaptureDaoTest`, `ShareReceiverTest`) | needs device/emulator | **not run here** |
 | APK build | `scripts\build_apk.bat` | **not produced here**; script verified for logic only |
-| Windows `.bat` scripts | reviewed, CRLF line endings | **not executed here** (no Windows) |
+| Windows `.bat` scripts | reviewed, CRLF line endings, scanned for parenthesis hazards | **not executed here** (no Windows); a block-parsing bug found by the user in setup.bat was fixed |
+| macOS/Linux `.sh` scripts | `bash -n` syntax check; `setup.sh` and `run_server.sh` executed end to end on Linux (venv, offline wheel install, DB init, server start, `/health` OK) | **passed on Linux**; macOS wheels present for arm64 and x86_64, not executed on a Mac |
 | Manual checklist (`docs/WINDOWS_MANUAL_CHECKLIST.md`) | physical PC + phone | **pending**: must be done by you before relying on the invisible-capture claim |
 
 Everything marked "not run here" is honest unverified work; the code was written carefully against current library APIs but a compile on your machine is the real test. If `build_apk.bat` reports a compile error, paste the first error line back and it can be fixed quickly.

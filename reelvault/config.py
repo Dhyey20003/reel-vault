@@ -69,6 +69,8 @@ def default_data_dir() -> Path:
     if os.name == "nt":
         base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
         return Path(base) / "ReelVault" / "Data"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "ReelVault" / "Data"
     xdg = os.environ.get("XDG_DATA_HOME")
     base = Path(xdg) if xdg else Path.home() / ".local" / "share"
     return base / "ReelVault" / "Data"
@@ -81,6 +83,8 @@ def default_media_dir() -> Path:
     if os.name == "nt":
         profile = os.environ.get("USERPROFILE") or str(Path.home())
         return Path(profile) / "Videos" / "ReelVault"
+    if sys.platform == "darwin":
+        return Path.home() / "Movies" / "ReelVault"
     return Path.home() / "Videos" / "ReelVault"
 
 

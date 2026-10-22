@@ -1,22 +1,51 @@
 # ReelVault
 
-Capture Instagram Reels on your Android phone with one tap, sync them over your home WiFi to a workspace on your Windows PC, and organize, annotate, download references, analyze and track each idea from **To Make** to **Published**.
+Capture Instagram Reels on your Android phone with one tap, sync them over your home WiFi to a workspace on your computer (Windows or macOS), and organize, annotate, download references, analyze and track each idea from **To Make** to **Published**.
+
+**On a Mac? Start with [Quick start on macOS](#quick-start-on-macos).** The Windows steps use the `.bat` scripts; the macOS steps use the matching `.sh` scripts in the same `scripts/` folder.
 
 Two parts, two processes, no mandatory cloud:
 
 | Part | Tech | What it does |
 |---|---|---|
-| **PC workspace** (`reelvault/`, `launcher/`) | Python 3.12/3.13, FastAPI, SQLite (WAL), vanilla JS UI, all assets local | The main app. Runs at `http://127.0.0.1:8765/`. Also exposes the token-gated LAN sync API the phone calls. Packaged to `dist\ReelVault.exe` with PyInstaller. |
+| **PC workspace** (`reelvault/`, `launcher/`) | Python 3.12/3.13, FastAPI, SQLite (WAL), vanilla JS UI, all assets local | The main app. Runs at `http://127.0.0.1:8765/`. Also exposes the token-gated LAN sync API the phone calls. Packaged to `dist\ReelVault.exe` (Windows) or `dist/ReelVault` (macOS) with PyInstaller. |
 | **Android capture app** (`android/`) | Kotlin, Jetpack Compose, Room, WorkManager | A share target. Saves the Reel link locally first, then syncs to the PC when reachable. Inbox, sync status and settings only. |
 
-## Prerequisites
+## Quick start on macOS
+
+Prerequisites: Python 3.12 or 3.13 (`brew install python@3.13`, or the installer from python.org). The `wheelhouse/` folder contains macOS wheels for both Apple Silicon and Intel, so setup works offline.
+
+1. Unzip `ReelVault_v1.0.0.zip`, for example to `~/ReelVault`.
+2. Open Terminal, go there and run setup once:
+
+```
+cd ~/ReelVault
+bash scripts/setup.sh
+```
+
+3. Start the workspace (Ctrl+C stops it):
+
+```
+bash scripts/run_server.sh
+```
+
+   It prints the data folder, `http://127.0.0.1:8765/` and your LAN IP, and opens the browser. `bash scripts/run_all.sh` does setup if needed and then starts.
+4. In the browser go to **Settings**, tick **LAN access**, click **Save settings**, stop the server (Ctrl+C) and run `bash scripts/run_server.sh` again. The terminal now prints `LAN access: ENABLED -> phone uses host 192.168.x.x port 8765`. If macOS asks whether Python may accept incoming network connections, click **Allow**.
+5. Build the APK with `bash scripts/build_apk.sh`. It needs JDK 17 (`brew install --cask temurin@17`) and the Android SDK (install Android Studio once, or `brew install --cask android-commandlinetools` plus the `sdkmanager` line the script prints). Then install `dist/ReelVault.apk` on the phone (AirDrop or USB, then open it, or `adb install -r dist/ReelVault.apk`).
+6. Pair and share exactly as in steps 6 and 7 of the Windows run order below.
+
+Standalone binary without Python: `bash scripts/build_pc_app.sh` produces `dist/ReelVault`. Gatekeeper may block the unsigned binary; right-click > Open the first time.
+
+macOS folders: data in `~/Library/Application Support/ReelVault/Data`, downloaded references in `~/Movies/ReelVault` (configurable). Optional tools: `brew install yt-dlp ffmpeg`. The AI key goes in the environment (`export REELVAULT_AI_API_KEY=...` before `run_server.sh`) or in `~/Library/Application Support/ReelVault/Data/config.json`.
+
+## Prerequisites (Windows)
 
 * **PC app**: Windows 10/11 64-bit and Python 3.12 or 3.13 from python.org (tick "Add python.exe to PATH"). Nothing else: the `wheelhouse/` folder holds every pinned dependency for offline install.
-* **Building the APK**: JDK 17+ and the Android SDK (platform 35, build-tools 35). `scripts\build_apk.bat` checks for both and tells you exactly what to install if missing. The first build downloads Gradle and libraries once.
+* **Building the APK**: JDK 17+ and the Android SDK (platform 35, build-tools 35). `scripts\build_apk.bat` (Windows) or `bash scripts/build_apk.sh` (macOS) checks for both and tells you exactly what to install if missing. The first build downloads Gradle and libraries once.
 * **Optional**: `yt-dlp` and `ffmpeg` on PATH (or their paths set in Settings) for "Download Reference" and frame extraction. `winget install yt-dlp` and `winget install Gyan.FFmpeg`.
 * **Optional**: an Anthropic API key for "Analyze Reel". See [AI analysis](#ai-analysis-optional).
 
-## Run order (first time)
+## Run order on Windows (first time)
 
 1. Unzip `ReelVault_v1.0.0.zip` to a folder without spaces if possible, for example `C:\ReelVault`.
 2. Double-click `scripts\setup.bat` once. It creates `.venv`, installs from `wheelhouse\` offline and initializes the database in `%LOCALAPPDATA%\ReelVault\Data`.
@@ -30,11 +59,11 @@ Two parts, two processes, no mandatory cloud:
 
 ## Finding the PC's LAN IP
 
-`run_server.bat` prints it. You can also run `ipconfig` and look for the IPv4 address of your WiFi adapter (usually `192.168.x.x` or `10.x.x.x`). The phone and the PC must be on the same WiFi network. If a corporate or guest WiFi isolates clients, sync will not work; use your home network or a phone hotspot that both devices join.
+`run_server.bat` / `run_server.sh` prints it. On Windows you can also run `ipconfig` and look for the IPv4 address of your WiFi adapter; on macOS use System Settings > Wi-Fi > Details, or `ipconfig getifaddr en0` in Terminal (usually `192.168.x.x` or `10.x.x.x`). The phone and the PC must be on the same WiFi network. If a corporate or guest WiFi isolates clients, sync will not work; use your home network or a phone hotspot that both devices join.
 
 ## Enabling LAN access
 
-Localhost only is the default. In **Settings > Server** tick **LAN access**, save, and restart ReelVault. The server then binds to all interfaces, but a middleware rejects every client whose address is not loopback, RFC1918 private, link-local or CGNAT. Windows Firewall will ask to allow Python (or ReelVault.exe) on **private** networks the first time; allow it. Do not allow it on public networks.
+Localhost only is the default. In **Settings > Server** tick **LAN access**, save, and restart ReelVault. The server then binds to all interfaces, but a middleware rejects every client whose address is not loopback, RFC1918 private, link-local or CGNAT. Windows Firewall will ask to allow Python (or ReelVault.exe) on **private** networks the first time; allow it. Do not allow it on public networks. On macOS the firewall prompt asks whether Python may accept incoming connections; allow it.
 
 ## Pairing
 
@@ -81,14 +110,17 @@ References are organized by trip on disk so the Resolve media pool can import a 
 
 Off by default. When enabled, High-priority ideas whose follow-up date has arrived show a banner in the UI (and a browser notification if you allowed it). A quiet period prevents repeats and an unchanged idea is not reminded twice.
 
-## Building the Windows exe
+## Building the standalone app
 
-`scripts\build_pc_exe.bat` installs PyInstaller from the wheelhouse and produces `dist\ReelVault.exe`, a single-file console app. Run it directly on any Windows 10/11 64-bit PC; no Python needed. Data stays in `%LOCALAPPDATA%\ReelVault\Data`. The exe is unsigned, so SmartScreen may warn on first run.
+* Windows: `scripts\build_pc_exe.bat` produces `dist\ReelVault.exe`, a single-file console app. Run it on any Windows 10/11 64-bit PC; no Python needed. The exe is unsigned, so SmartScreen may warn on first run.
+* macOS: `bash scripts/build_pc_app.sh` produces `dist/ReelVault` for the Mac it was built on (Apple Silicon or Intel). Gatekeeper may block it the first time; right-click > Open.
+
+Data stays in the per-user data folder listed below.
 
 ## Data
 
 ```
-%LOCALAPPDATA%\ReelVault\Data\
+Windows: %LOCALAPPDATA%\ReelVault\Data\      macOS: ~/Library/Application Support/ReelVault/Data/
   reelvault.db      SQLite (WAL), versioned schema with migrations
   thumbnails\       fetched thumbnails
   attachments\      screenshots you upload
@@ -96,7 +128,7 @@ Off by default. When enabled, High-priority ideas whose follow-up date has arriv
   backups\          "Backup DB now" copies
   logs\             reelvault.log
   config.json       optional, holds the AI key (never in git, never in the exe)
-%USERPROFILE%\Videos\ReelVault\   downloaded references (configurable)
+Windows: %USERPROFILE%\Videos\ReelVault\   macOS: ~/Movies/ReelVault/   downloaded references (configurable)
 ```
 
 ## Development (any OS)
