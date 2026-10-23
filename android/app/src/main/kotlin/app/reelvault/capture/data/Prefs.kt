@@ -47,6 +47,15 @@ class Prefs(context: Context) {
         get() = plain.getString("last_sync", "") ?: ""
         set(v) = plain.edit().putString("last_sync", v).apply()
 
+    var lastSuccessAt: Long
+        get() = plain.getLong("last_success_at", 0L)
+        set(v) = plain.edit().putLong("last_success_at", v).apply()
+
+    /** Sync even when Android reports the network has no internet (home WiFi without uplink, hotspots). */
+    var syncWithoutInternet: Boolean
+        get() = plain.getBoolean("sync_without_internet", false)
+        set(v) = plain.edit().putBoolean("sync_without_internet", v).apply()
+
     val deviceId: String
         get() = plain.getString("device_id", null) ?: UUID.randomUUID().toString().also {
             plain.edit().putString("device_id", it).apply()

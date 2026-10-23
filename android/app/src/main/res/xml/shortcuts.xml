@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares the share target for Sharing Shortcuts. The dynamic shortcut itself is published by Shortcuts.kt. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <share-target android:targetClass="app.reelvault.capture.share.ShareReceiverActivity">
+        <data android:mimeType="text/plain" />
+        <category android:name="app.reelvault.capture.SHARE_TARGET" />
+    </share-target>
+</shortcuts>

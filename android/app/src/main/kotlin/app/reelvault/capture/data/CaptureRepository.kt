@@ -23,7 +23,7 @@ class CaptureRepository(private val dao: CaptureDao) {
         parsed.normalizedUrl?.let { norm ->
             dao.findByNormalized(norm)?.let { existing ->
                 if (existing.syncState == SyncState.FAILED) {
-                    dao.update(existing.copy(syncState = SyncState.PENDING, attempts = 0, nextAttemptAt = 0L, lastError = null))
+                    dao.update(existing.copy(syncState = SyncState.PENDING, attempts = 0, nextAttemptAt = 0L, lastError = null, permanent = false))
                 }
                 return SaveOutcome.AlreadyQueued(existing)
             }
@@ -41,28 +41,39 @@ class CaptureRepository(private val dao: CaptureDao) {
 
     suspend fun due(now: Long = System.currentTimeMillis()): List<Capture> = dao.due(now)
 
-    suspend fun applyResults(results: List<CaptureResult>, now: Long = System.currentTimeMillis()) {
-        for (r in results) {
-            val c = dao.byId(r.captureId) ?: continue
-            if (r.accepted) {
-                dao.update(c.copy(syncState = SyncState.SYNCED, syncedAt = now, serverResult = r.result, ideaId = r.ideaId, lastError = null))
-            } else {
-                dao.update(c.copy(syncState = SyncState.FAILED, serverResult = r.result, lastError = r.error ?: "rejected by PC"))
+    suspend fun markSyncing(batch: List<Capture>) { for (c in batch) dao.update(c.copy(syncState = SyncState.SYNCING)) }
+
+    /** Applies per-item acknowledgements. Items missing from the response stay pending and are re-sent. */
+    suspend fun applyResults(batch: List<Capture>, results: List<CaptureResult>, now: Long = System.currentTimeMillis()) {
+        val byId = results.associateBy { it.captureId }
+        for (c in batch) {
+            val r = byId[c.captureId]
+            val cur = dao.byId(c.captureId) ?: continue
+            when {
+                r == null -> dao.update(cur.copy(syncState = SyncState.PENDING, lastError = "no acknowledgement for this item; will resend"))
+                r.accepted -> dao.update(cur.copy(syncState = SyncState.SYNCED, syncedAt = now, serverResult = r.result, ideaId = r.ideaId, lastError = null, permanent = false))
+                else -> dao.update(cur.copy(syncState = SyncState.FAILED, serverResult = r.result, lastError = r.error ?: "rejected by PC", permanent = true))
             }
         }
     }
 
-    /** Records a transport failure for every capture in the batch, with exponential backoff. */
+    /**
+     * Records a transport failure for every capture in the batch with exponential backoff.
+     * Transient failures are never abandoned: after MAX attempts the row shows as failed but is
+     * still retried every 30 minutes. Permanent failures (bad token/host) wait for a settings fix.
+     */
     suspend fun markBatchFailed(batch: List<Capture>, error: String, permanent: Boolean, now: Long = System.currentTimeMillis()) {
         for (c in batch) {
-            val attempts = c.attempts + 1
-            val giveUp = permanent || attempts >= Backoff.MAX_ATTEMPTS_BEFORE_FAILED
+            val cur = dao.byId(c.captureId) ?: continue
+            val attempts = cur.attempts + 1
+            val exhausted = attempts >= Backoff.MAX_ATTEMPTS_BEFORE_FAILED
             dao.update(
-                c.copy(
+                cur.copy(
                     attempts = attempts,
                     lastError = error,
-                    syncState = if (giveUp) SyncState.FAILED else SyncState.PENDING,
-                    nextAttemptAt = if (giveUp) c.nextAttemptAt else Backoff.nextAttemptAt(now, attempts - 1),
+                    permanent = permanent,
+                    syncState = if (permanent || exhausted) SyncState.FAILED else SyncState.PENDING,
+                    nextAttemptAt = if (permanent) cur.nextAttemptAt else if (exhausted) now + Backoff.MAX_MS else Backoff.nextAttemptAt(now, attempts - 1),
                 ),
             )
         }
@@ -70,6 +81,7 @@ class CaptureRepository(private val dao: CaptureDao) {
 
     suspend fun retryFailed(): Int = dao.retryFailed()
     suspend fun makeAllDue(): Int = dao.makeAllDue()
+    suspend fun resetInFlight(): Int = dao.resetInFlight()
     suspend fun delete(id: String) = dao.delete(id)
     fun observeAll() = dao.observeAll()
     fun observeCount(state: String) = dao.observeCount(state)

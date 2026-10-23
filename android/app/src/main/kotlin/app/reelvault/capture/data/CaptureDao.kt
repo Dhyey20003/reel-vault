@@ -24,17 +24,21 @@ interface CaptureDao {
     @Query("SELECT * FROM captures WHERE capture_id = :id")
     suspend fun byId(id: String): Capture?
 
-    @Query("SELECT * FROM captures WHERE sync_state = 'pending' AND next_attempt_at <= :now ORDER BY created_at LIMIT :limit")
+    /** Pending rows whose retry time has come, plus transient failures (never abandoned), plus rows stuck in 'syncing' after a crash. */
+    @Query("SELECT * FROM captures WHERE ((sync_state = 'pending' OR sync_state = 'syncing') AND next_attempt_at <= :now) OR (sync_state = 'failed' AND permanent = 0 AND next_attempt_at <= :now) ORDER BY created_at LIMIT :limit")
     suspend fun due(now: Long, limit: Int = 100): List<Capture>
 
     @Query("SELECT COUNT(*) FROM captures WHERE sync_state = :state")
     fun observeCount(state: String): Flow<Int>
 
-    @Query("UPDATE captures SET sync_state = 'pending', attempts = 0, next_attempt_at = 0, last_error = NULL WHERE sync_state = 'failed'")
+    @Query("UPDATE captures SET sync_state = 'pending', attempts = 0, next_attempt_at = 0, last_error = NULL, permanent = 0 WHERE sync_state = 'failed'")
     suspend fun retryFailed(): Int
 
-    @Query("UPDATE captures SET next_attempt_at = 0 WHERE sync_state = 'pending'")
+    @Query("UPDATE captures SET next_attempt_at = 0 WHERE sync_state <> 'synced'")
     suspend fun makeAllDue(): Int
+
+    @Query("UPDATE captures SET sync_state = 'pending' WHERE sync_state = 'syncing'")
+    suspend fun resetInFlight(): Int
 
     @Query("DELETE FROM captures WHERE capture_id = :id")
     suspend fun delete(id: String)
