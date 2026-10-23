@@ -158,6 +158,46 @@ MIGRATIONS: list[Migration] = [
     (3, "ideas: duplicate_of column for intentionally saved copies", """
         ALTER TABLE ideas ADD COLUMN duplicate_of TEXT;
     """),
+    (4, "v2: media validation, playback, covers, tags, pipeline", """
+        ALTER TABLE ideas ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE ideas ADD COLUMN playback_path TEXT;
+        ALTER TABLE ideas ADD COLUMN media_json TEXT;
+        ALTER TABLE ideas ADD COLUMN media_status TEXT NOT NULL DEFAULT 'unknown';
+        ALTER TABLE ideas ADD COLUMN cover_path TEXT;
+        ALTER TABLE ideas ADD COLUMN cover_time REAL;
+        ALTER TABLE ideas ADD COLUMN pipeline_stage TEXT NOT NULL DEFAULT 'idle';
+        ALTER TABLE ideas ADD COLUMN pipeline_error TEXT;
+        ALTER TABLE ideas ADD COLUMN analysis_cache_key TEXT;
+        ALTER TABLE ideas ADD COLUMN loop_start REAL;
+        ALTER TABLE ideas ADD COLUMN loop_end REAL;
+        CREATE TABLE timed_notes (
+            id TEXT PRIMARY KEY,
+            idea_id TEXT NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+            t REAL NOT NULL,
+            text TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_timed_notes_idea ON timed_notes(idea_id, t);
+        ALTER TABLE analysis_jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE analysis_jobs ADD COLUMN progress TEXT;
+        ALTER TABLE download_jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0;
+    """),
+    (5, "v2: trip adaptation plans", """
+        CREATE TABLE trip_plans (
+            id TEXT PRIMARY KEY,
+            trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+            inputs_json TEXT NOT NULL,
+            plan_json TEXT,
+            status TEXT NOT NULL,
+            error TEXT,
+            provider TEXT,
+            model TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_trip_plans_trip ON trip_plans(trip_id, created_at);
+    """),
 ]
 
 
@@ -294,6 +334,16 @@ class Database:
             tok = secrets.token_urlsafe(24)
             self.set_setting("pairing_token", tok)
         return tok
+
+    def backup_to(self, dest: Path) -> Path:
+        """Consistent online backup (works with WAL) using SQLite's backup API."""
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        out = sqlite3.connect(str(dest))
+        try:
+            self.connection().backup(out)
+        finally:
+            out.close()
+        return dest
 
     def rotate_pairing_token(self) -> str:
         tok = secrets.token_urlsafe(24)
