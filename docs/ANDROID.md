@@ -1,4 +1,16 @@
-# Android capture app
+# Android capture app (v2)
+
+## Shortest supported sharing flow
+1. In Instagram open the Reel, tap **Share** (paper-plane icon).
+2. Tap **"Save to ReelVault"** in the direct-share row at the top if Android shows it there (the app publishes a Sharing Shortcut; Android ranks that row by usage). Otherwise scroll the app row to ReelVault.
+3. Nothing opens; an optional toast confirms. You are still in Instagram.
+
+To make step 2 reliable: in the share sheet long-press the ReelVault entry and choose **Pin** (Android 11+). Instagram's own "Share to" grid cannot be extended by third-party apps.
+
+Fallback without the share sheet: copy the link in Instagram, open ReelVault, tap **Paste** then **Save** on the Inbox tab.
+
+Supported links: Instagram reels/posts, YouTube videos and Shorts, any http(s) link (saved as a link); plain text without a link is saved as text.
+
 
 Package `app.reelvault.capture`, minSdk 26, targetSdk 35. Modules: `core` (pure Kotlin, unit-tested on the JVM) and `app`.
 

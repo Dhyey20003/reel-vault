@@ -37,3 +37,16 @@ Tick each item on a real PC or Mac and a real Android phone. On macOS replace ea
 - [ ] Trip > Build shot list downloads Markdown and plain text. Export trip folder creates `Data\exports\<Trip>-<stamp>\` with trip.md, shotlist.md, trip.json and copied references; originals untouched.
 - [ ] Reminders: enable, set an idea to High with a past follow-up date, reload: banner appears; Dismiss hides it; it does not return until the idea changes.
 - [ ] Backup DB now creates a file in `Data\backups\`.
+
+## v2 additions
+- [ ] Upgrade: with a v1 install running, stop it, run `upgrade_v2`, start v2: all ideas, trips, notes, categories, attachments and pairing are still there; `Data\backups\pre-v2-*.db` exists.
+- [ ] Rollback: run `rollback_v2` with that backup and start v1 again: works. Then re-run the upgrade.
+- [ ] Install the v2 APK over v1 without uninstalling: the phone Inbox still lists the old captures; pairing kept.
+- [ ] Share from Instagram: "Save to ReelVault" visible in the share sheet (direct-share row after pinning); back in Instagram immediately; capture appears on the PC. Try YouTube and a Short too. Try Paste + Save.
+- [ ] Pairing: scan the PC QR; host/port/token fill in and the card says "Connected". Then: rotate the token on the PC → phone shows "token rejected" with the hint; rescan → Retry failed syncs. Turn LAN access off → message names LAN access/firewall.
+- [ ] Offline PC: share 3 reels with the PC off; phone shows pending/"waiting for PC (retrying)"; start the PC; they arrive within 15 min (or at once with Sync now); force-stop and reopen the app: queue intact.
+- [ ] Download a reel with ffmpeg installed: file has video and audio; play it inside ReelVault; seek; A–B loop; add a timestamped note; it plays inside the trip view too. Without ffmpeg: audio-only result is reported as failed (file kept) and listed in Repair centre.
+- [ ] Drag a local MP4 onto the Library: imported, playable, cover generated; drag the same file again: not duplicated.
+- [ ] Local AI: run `scripts/local_ai/setup_ollama_mac.sh`, Test local AI is green, Analyze an idea with a downloaded video: brief lists frames analysed; turn WiFi off during analysis: still completes (no external calls).
+- [ ] Adapt for my trip generates a plan; edits save.
+- [ ] Pipeline: enable auto-download, share a reel: it downloads by itself; pause stops new work; restart the server mid-download: it resumes.

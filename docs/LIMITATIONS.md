@@ -1,13 +1,12 @@
-# Known limitations and assumptions (v1)
+# Known limitations (v2.0.0)
 
-* **APK and standalone app were not prebuilt in the packaging environment.** The build machine had no access to Google's Android repositories (dl.google.com was blocked) and was Linux, so `dist/ReelVault.apk` and the standalone app must be produced on your computer: `scripts\build_apk.bat` + `scripts\build_pc_exe.bat` on Windows, `bash scripts/build_apk.sh` + `bash scripts/build_pc_app.sh` on macOS. The PyInstaller spec was validated by building a Linux binary with the same spec; the Android `app` module compiles only once the SDK is present. See `docs/TEST_RESULTS.md`.
-* **Instagram metadata** depends on yt-dlp or an official oEmbed app token. Without either, Instagram ideas show *metadata unavailable* and you type the title yourself. This is expected and never counts as a failed capture.
-* **Downloads** need yt-dlp and work only for content yt-dlp can access; private or login-gated Reels fail honestly.
-* **Plain HTTP on the LAN** for sync (see `docs/SECURITY.md`).
-* **AI analysis** needs a key and costs money per run. The model cannot watch video; it only sees text, extracted frames and screenshots.
-* **Reminders** are shown by the web UI (banner + browser notification). There is no Windows tray service in v1, so you see reminders when the workspace is open.
-* **LAN access and port changes** need a restart of the server.
-* **Resolve scripting** is detected, not bundled; importing into a bin requires Resolve to run with external scripting enabled.
-* **No multi-user, no accounts, no social features** by design.
-* **macOS wheelhouse coverage.** `wheelhouse/` contains macOS wheels for Python 3.12 and 3.13 on both Apple Silicon (arm64) and Intel (x86_64). If pip reports a missing wheel on your Mac, `setup.sh` prints the one-line PyPI fallback (needs internet once).
-* **Windows-only conveniences** such as "Reveal in Explorer" map to Finder ("Reveal in Finder") on macOS; the button label in the UI still says Explorer.
+* **Binaries and APK are not prebuilt here** (Android SDK unreachable from the build environment; no macOS/Windows host). Build them with the scripts; the Android `app` module compiled only in your environment, so a first build may surface a compile error I could not see. Send the first error line.
+* **Share sheet ranking** is decided by Android. The Sharing Shortcut makes "Save to ReelVault" eligible for the direct-share row; pinning it (long-press in the share sheet) is the reliable one-tap path. There is no button inside Instagram's own UI.
+* **Android background limits**: sync runs through WorkManager; with battery optimisation on some phones it may wait until the app is opened or the periodic window (15 min) fires. Captures are never lost; they wait on the phone.
+* **Metadata** for Instagram depends on yt-dlp or an official oEmbed token; private/login-only sources are reported, not bypassed.
+* **Playback copies** need ffmpeg; without it, non-MP4/H.264 files show "Needs ffmpeg". H.264 is not decodable in some open-source Chromium builds (tests used WebM); mainstream browsers play MP4/H.264.
+* **Local transcription** requires a whisper CLI you install; without it the transcript field stays empty unless typed.
+* **Local AI quality** depends on the model and RAM; frames are samples, not the video. Outputs are suggestions to edit.
+* **Plain HTTP on the LAN** for phone sync (see `docs/SECURITY.md`); Ollama has no authentication and must stay on localhost or a private network/tunnel.
+* **LAN access and port changes** still need a restart.
+* **Reminders** appear in the web UI only.
