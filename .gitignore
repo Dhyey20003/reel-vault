@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/*.exe
+dist/ReelVault/
+dist/ReelVault.apk
+devdata/
+*.log
+config.json
+.env
+android/.gradle/
+android/**/build/
+android/local.properties
+android/.idea/
+*.iml
+.pytest_cache/

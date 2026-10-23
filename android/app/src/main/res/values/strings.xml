@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ReelVault</string>
+    <string name="share_target_label">Save to ReelVault</string>
+    <string name="toast_saved">Saved to ReelVault</string>
+    <string name="toast_saved_again">Already in ReelVault; will sync again</string>
+    <string name="toast_nothing">Nothing to save</string>
+</resources>

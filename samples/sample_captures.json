@@ -1,0 +1,9 @@
+{
+  "device_id": "sample-device",
+  "device_name": "Sample phone",
+  "captures": [
+    {"capture_id": "sample-1", "shared_text": "Udaipur lake sunset reel https://www.instagram.com/reel/C1a2B3c4D5e/?igsh=MTIzNDU2", "captured_at": "2026-10-18T09:12:00Z"},
+    {"capture_id": "sample-2", "url": "https://www.youtube.com/shorts/dQw4w9WgXcQ", "captured_at": "2026-10-19T17:40:00Z"},
+    {"capture_id": "sample-3", "shared_text": "Kedarnath trek transitions https://www.instagram.com/reel/XyZ987/", "captured_at": "2026-10-20T07:05:00Z"}
+  ]
+}

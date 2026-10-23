@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Never back up the encrypted pairing token (it is bound to this device's keystore anyway). -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="reelvault_secure.xml" />
+</full-backup-content>

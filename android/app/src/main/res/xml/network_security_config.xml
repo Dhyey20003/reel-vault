@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1 syncs over plain HTTP to the PC on the private LAN (documented limitation, see docs/SECURITY.md).
+     Android's config cannot express "private IP ranges only", so cleartext is permitted here and the
+     app itself refuses to connect to any host that is not a private/loopback address or a .local/.lan name
+     (see sync/SyncClient.kt). The app never talks to any other server. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
