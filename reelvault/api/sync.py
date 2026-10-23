@@ -44,8 +44,7 @@ def ping(request: Request) -> dict[str, Any]:
 def receive(batch: SyncBatch, request: Request) -> dict[str, Any]:
     w = ws(request)
     results = w.repo.receive_captures(batch.device_id, batch.device_name, [c.model_dump() for c in batch.captures])
-    if w.setting("metadata_auto", True):
-        for r in results:
-            if r.get("result") == "created" and r.get("idea_id"):
-                w.queue_metadata(r["idea_id"])
+    for r in results:
+        if r.get("result") == "created" and r.get("idea_id"):
+            w.on_capture_synced(r["idea_id"])
     return {"ok": True, "results": results, "server_time": utcnow()}

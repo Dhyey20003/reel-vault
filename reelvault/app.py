@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import sync, workspace as workspace_api
+from .api import sync, v2, workspace as workspace_api
 from .config import static_dir
 from .netutil import is_private_client
 from .workspace import Workspace
@@ -24,10 +24,9 @@ def create_app(data_dir: Path, *, port: int = 8765, lan_enabled: bool = False, w
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if ws.setting("metadata_auto", True):
-            for row in ws.db.connection().execute(
-                    "SELECT id FROM ideas WHERE deleted_at IS NULL AND metadata_status IN ('pending','fetching') LIMIT 50"):
-                ws.queue_metadata(row["id"], force=True)
+        resumed = ws.resume_pipeline()
+        if any(resumed.values()):
+            log.info("resumed background work after restart: %s", resumed)
         yield
         ws.close()
 
@@ -49,6 +48,7 @@ def create_app(data_dir: Path, *, port: int = 8765, lan_enabled: bool = False, w
 
     app.include_router(sync.router)
     app.include_router(workspace_api.router)
+    app.include_router(v2.router)
 
     static = static_dir()
     app.mount("/static", StaticFiles(directory=str(static)), name="static")

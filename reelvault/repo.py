@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 from typing import Any, Iterable
 
 from .config import STATUSES
@@ -16,8 +17,9 @@ from .urlnorm import extract_url, is_safe_url, normalize_url
 IDEA_EDITABLE = {
     "title", "creator", "caption", "notes", "shooting_notes", "editing_notes", "transcript",
     "category_id", "priority", "status", "finished_video_url", "follow_up_date", "canonical_url",
-    "thumbnail_url",
+    "thumbnail_url", "tags_json", "loop_start", "loop_end",
 }
+TAG_SUGGESTIONS = ["hook", "lighting", "camera movement", "transition", "colour", "sound", "storytelling", "pacing", "drone", "timelapse", "talking head", "b-roll"]
 
 
 def _row(r: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -96,10 +98,18 @@ class Repo:
         row["trips"] = _rows(self.db.connection().execute(
             "SELECT t.id, t.name FROM idea_trips it JOIN trips t ON t.id=it.trip_id WHERE it.idea_id=? ORDER BY t.name",
             (row["id"],)))
-        for key in ("analysis_json", "metadata_json"):
+        for key in ("analysis_json", "metadata_json", "media_json"):
             raw = row.get(key)
             row[key[:-5]] = json.loads(raw) if raw else None
             row.pop(key, None)
+        try:
+            row["tags"] = json.loads(row.pop("tags_json") or "[]")
+        except ValueError:
+            row["tags"] = []
+        row["has_thumbnail"] = bool((row.get("cover_path") and Path(row["cover_path"]).is_file()) or (row.get("thumbnail_path") and Path(row["thumbnail_path"]).is_file()))
+        row["playable"] = bool(row.get("playback_path") and Path(row["playback_path"]).is_file() and row.get("media_status") == "ok")
+        row["timed_notes"] = _rows(self.db.connection().execute(
+            "SELECT id, t, text, created_at FROM timed_notes WHERE idea_id=? ORDER BY t", (row["id"],)))
         row["attachments"] = _rows(self.db.connection().execute(
             "SELECT id, kind, filename, created_at FROM attachments WHERE idea_id=? ORDER BY created_at", (row["id"],)))
 
@@ -110,13 +120,13 @@ class Repo:
 
     def create_idea(self, original_url: str, *, shared_text: str | None = None, source: str = "manual",
                     device_id: str | None = None, captured_at: str | None = None,
-                    allow_duplicate: bool = False, **fields: Any) -> tuple[dict[str, Any], bool]:
+                    allow_duplicate: bool = False, normalized_override: str | None = None, **fields: Any) -> tuple[dict[str, Any], bool]:
         """Returns (idea, created). When a non-deleted idea with the same normalized URL
         exists and allow_duplicate is False, that idea is returned with created=False."""
         original_url = original_url.strip()
-        if not is_safe_url(original_url):
+        if source != "local" and not is_safe_url(original_url):
             raise ValueError("Only http(s) URLs up to 2048 characters are accepted")
-        normalized = normalize_url(original_url)
+        normalized = normalized_override or normalize_url(original_url)
         existing = self.find_by_normalized(normalized)
         if existing and not allow_duplicate:
             return self.idea(existing["id"]), False  # type: ignore[return-value]
@@ -148,6 +158,11 @@ class Repo:
             raise ValueError("Canonical URL must be http(s)")
         if "finished_video_url" in clean and clean["finished_video_url"] and not is_safe_url(clean["finished_video_url"]):
             raise ValueError("Finished video link must be http(s)")
+        if "tags" in fields:
+            tags = fields["tags"]
+            if not isinstance(tags, list) or not all(isinstance(x, str) for x in tags):
+                raise ValueError("tags must be a list of strings")
+            clean["tags_json"] = json.dumps([t.strip()[:40] for t in dict.fromkeys(x.strip().lower() for x in tags if x.strip())])
         with self.db.tx() as conn:
             row = conn.execute("SELECT updated_at FROM ideas WHERE id=? AND deleted_at IS NULL", (idea_id,)).fetchone()
             if not row:
@@ -180,13 +195,17 @@ class Repo:
                    category_id: str | None = None, trip_id: str | None = None, inbox: bool = False,
                    download_status: str | None = None, captured_from: str | None = None,
                    captured_to: str | None = None, limit: int = 500, offset: int = 0,
-                   sort: str = "captured_at", order: str = "desc") -> list[dict[str, Any]]:
+                   sort: str = "captured_at", order: str = "desc", tag: str | None = None, playable: bool = False) -> list[dict[str, Any]]:
         where = ["i.deleted_at IS NULL"]
         params: list[Any] = []
         if q:
             like = f"%{q.strip()}%"
-            where.append("(i.title LIKE ? OR i.caption LIKE ? OR i.notes LIKE ? OR i.creator LIKE ? OR i.original_url LIKE ? OR i.shooting_notes LIKE ? OR i.editing_notes LIKE ?)")
-            params += [like] * 7
+            where.append("(i.title LIKE ? OR i.caption LIKE ? OR i.notes LIKE ? OR i.creator LIKE ? OR i.original_url LIKE ? OR i.shooting_notes LIKE ? OR i.editing_notes LIKE ? OR i.tags_json LIKE ?)")
+            params += [like] * 8
+        if tag:
+            where.append("i.tags_json LIKE ?"); params.append(f'%"{tag.strip().lower()}"%')
+        if playable:
+            where.append("i.playback_path IS NOT NULL AND i.media_status='ok'")
         if status:
             where.append("i.status=?"); params.append(status)
         if priority:
@@ -228,6 +247,62 @@ class Repo:
             "trips": one("SELECT COUNT(*) FROM trips WHERE archived=0"),
             "metadata_pending": one("SELECT COUNT(*) FROM ideas WHERE deleted_at IS NULL AND metadata_status IN ('pending','fetching')"),
         }
+
+    # ------------------------------------------------------------- timed notes
+    def add_timed_note(self, idea_id: str, t: float, text: str) -> dict[str, Any]:
+        text = text.strip()
+        if not text:
+            raise ValueError("Note text is required")
+        nid = new_id(); now = utcnow()
+        with self.db.tx() as conn:
+            if not conn.execute("SELECT 1 FROM ideas WHERE id=?", (idea_id,)).fetchone():
+                raise KeyError(idea_id)
+            conn.execute("INSERT INTO timed_notes(id, idea_id, t, text, created_at, updated_at) VALUES (?,?,?,?,?,?)", (nid, idea_id, max(0.0, float(t)), text[:2000], now, now))
+            conn.execute("UPDATE ideas SET updated_at=? WHERE id=?", (now, idea_id))
+        return {"id": nid, "idea_id": idea_id, "t": max(0.0, float(t)), "text": text[:2000], "created_at": now}
+
+    def update_timed_note(self, note_id: str, t: float | None, text: str | None) -> None:
+        with self.db.tx() as conn:
+            if t is not None:
+                conn.execute("UPDATE timed_notes SET t=?, updated_at=? WHERE id=?", (max(0.0, float(t)), utcnow(), note_id))
+            if text is not None:
+                conn.execute("UPDATE timed_notes SET text=?, updated_at=? WHERE id=?", (text.strip()[:2000], utcnow(), note_id))
+
+    def delete_timed_note(self, note_id: str) -> None:
+        with self.db.tx() as conn:
+            conn.execute("DELETE FROM timed_notes WHERE id=?", (note_id,))
+
+    def recent_trips(self, limit: int = 5) -> list[dict[str, Any]]:
+        return _rows(self.db.connection().execute(
+            "SELECT t.id, t.name FROM trips t LEFT JOIN idea_trips it ON it.trip_id=t.id WHERE t.archived=0 "
+            "GROUP BY t.id ORDER BY MAX(COALESCE(it.added_at, t.updated_at)) DESC LIMIT ?", (limit,)))
+
+    def add_ideas_to_trip(self, idea_ids: list[str], trip_id: str) -> int:
+        n = 0
+        with self.db.tx() as conn:
+            if not conn.execute("SELECT 1 FROM trips WHERE id=?", (trip_id,)).fetchone():
+                raise KeyError(trip_id)
+            for iid in dict.fromkeys(idea_ids):
+                if conn.execute("SELECT 1 FROM ideas WHERE id=? AND deleted_at IS NULL", (iid,)).fetchone():
+                    cur = conn.execute("INSERT OR IGNORE INTO idea_trips(idea_id, trip_id, added_at) VALUES (?,?,?)", (iid, trip_id, utcnow()))
+                    n += cur.rowcount
+                    conn.execute("UPDATE ideas SET updated_at=? WHERE id=?", (utcnow(), iid))
+        return n
+
+    def remove_idea_from_trip(self, idea_id: str, trip_id: str) -> None:
+        with self.db.tx() as conn:
+            conn.execute("DELETE FROM idea_trips WHERE idea_id=? AND trip_id=?", (idea_id, trip_id))
+            conn.execute("UPDATE ideas SET updated_at=? WHERE id=?", (utcnow(), idea_id))
+
+    def all_tags(self) -> list[dict[str, Any]]:
+        counts: dict[str, int] = {}
+        for r in self.db.connection().execute("SELECT tags_json FROM ideas WHERE deleted_at IS NULL"):
+            try:
+                for t in json.loads(r[0] or "[]"):
+                    counts[t] = counts.get(t, 0) + 1
+            except ValueError:
+                pass
+        return [{"tag": k, "count": v} for k, v in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
 
     # ------------------------------------------------------------------ trips
     def trips(self, include_archived: bool = False) -> list[dict[str, Any]]:
