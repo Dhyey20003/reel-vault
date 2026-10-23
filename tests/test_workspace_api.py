@@ -169,9 +169,25 @@ def test_analysis_requires_key_and_validates_edits(client, token, monkeypatch):
     monkeypatch.delenv("REELVAULT_AI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     iid = _idea(client, token)
+    # Local provider (default) with Ollama unreachable at a closed port: queued job fails gracefully, no external call.
+    client.put("/api/settings", json={"values": {"ollama_url": "http://127.0.0.1:9"}})
     r = client.post(f"/api/ideas/{iid}/analyze").json()
-    assert r["ok"] is False and r["configured"] is False and "REELVAULT_AI_API_KEY" in r["error"]
-    assert client.get(f"/api/ideas/{iid}").json()["analysis_status"] == "none"
+    assert r["ok"] is True
+    import time
+    for _ in range(50):
+        st = client.get(f"/api/ideas/{iid}").json()
+        if st["analysis_status"] == "failed":
+            break
+        time.sleep(0.1)
+    assert st["analysis_status"] == "failed" and "not reachable" in st["analysis_error"]
+    # Cloud provider is opt-in: without opt-in it is refused even if a key were present.
+    client.put("/api/settings", json={"values": {"ai_provider": "anthropic"}})
+    r = client.post(f"/api/ideas/{iid}/analyze").json()
+    assert r["ok"] is False and r["configured"] is False and "opt-in" in r["error"]
+    client.put("/api/settings", json={"values": {"cloud_ai_opt_in": True}})
+    r = client.post(f"/api/ideas/{iid}/analyze").json()
+    assert r["ok"] is False and "REELVAULT_AI_API_KEY" in r["error"]
+    client.put("/api/settings", json={"values": {"ai_provider": "ollama", "cloud_ai_opt_in": False}})
     good = {"core_idea": "x", "shot_list": [{"shot": "wide", "duration_seconds": 2}], "observed_facts": ["caption mentions lake"]}
     r = client.put(f"/api/ideas/{iid}/analysis", json={"brief": good})
     assert r.status_code == 200 and r.json()["analysis"]["edited"] is True
@@ -194,12 +210,12 @@ def test_analysis_job_success_and_failure(client, token, workspace, monkeypatch)
     from reelvault.db import utcnow
     with workspace.db.tx() as conn:
         conn.execute("INSERT INTO analysis_jobs(id, idea_id, status, provider, model, created_at) VALUES ('j1', ?, 'queued', 'fake', 'm', ?)", (iid, utcnow()))
-    workspace._run_analysis("j1", iid, Fake(fail=True), "m")
+    workspace._run_analysis("j1", iid, Fake(fail=True), "fake", "m", "k1")
     i = client.get(f"/api/ideas/{iid}").json()
     assert i["analysis_status"] == "failed" and i["analysis_error"] == "provider down"
     with workspace.db.tx() as conn:
         conn.execute("INSERT INTO analysis_jobs(id, idea_id, status, provider, model, created_at) VALUES ('j2', ?, 'queued', 'fake', 'm', ?)", (iid, utcnow()))
-    workspace._run_analysis("j2", iid, Fake(fail=False), "m")
+    workspace._run_analysis("j2", iid, Fake(fail=False), "fake", "m", "k1")
     i = client.get(f"/api/ideas/{iid}").json()
     assert i["analysis_status"] == "done"
     assert i["analysis"]["brief"]["core_idea"] == "recreate"

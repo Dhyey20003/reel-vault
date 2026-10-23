@@ -50,6 +50,7 @@ class ShareReceiverActivity : Activity() {
             // Only after the row is on disk do we touch WorkManager (which also persists its request).
             if (outcome is CaptureRepository.SaveOutcome.Saved || outcome is CaptureRepository.SaveOutcome.AlreadyQueued) {
                 SyncScheduler.syncNow(app)
+                Shortcuts.reportUsed(app)
             }
             withContext(Dispatchers.Main) {
                 if (showToast) {

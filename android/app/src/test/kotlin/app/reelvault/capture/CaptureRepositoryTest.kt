@@ -23,10 +23,11 @@ class FakeDao : CaptureDao {
     override fun observeAll(): Flow<List<Capture>> = rows.map { it.values.sortedByDescending { c -> c.createdAt } }
     override suspend fun findByNormalized(normalized: String) = rows.value.values.firstOrNull { it.normalizedUrl == normalized }
     override suspend fun byId(id: String) = rows.value[id]
-    override suspend fun due(now: Long, limit: Int) = rows.value.values.filter { it.syncState == SyncState.PENDING && it.nextAttemptAt <= now }.sortedBy { it.createdAt }.take(limit)
+    override suspend fun due(now: Long, limit: Int) = rows.value.values.filter { ((it.syncState == SyncState.PENDING || it.syncState == SyncState.SYNCING) && it.nextAttemptAt <= now) || (it.syncState == SyncState.FAILED && !it.permanent && it.nextAttemptAt <= now) }.sortedBy { it.createdAt }.take(limit)
     override fun observeCount(state: String): Flow<Int> = rows.map { m -> m.values.count { it.syncState == state } }
-    override suspend fun retryFailed(): Int { val f = rows.value.values.filter { it.syncState == SyncState.FAILED }; f.forEach { update(it.copy(syncState = SyncState.PENDING, attempts = 0, nextAttemptAt = 0, lastError = null)) }; return f.size }
-    override suspend fun makeAllDue(): Int { val p = rows.value.values.filter { it.syncState == SyncState.PENDING }; p.forEach { update(it.copy(nextAttemptAt = 0)) }; return p.size }
+    override suspend fun retryFailed(): Int { val f = rows.value.values.filter { it.syncState == SyncState.FAILED }; f.forEach { update(it.copy(syncState = SyncState.PENDING, attempts = 0, nextAttemptAt = 0, lastError = null, permanent = false)) }; return f.size }
+    override suspend fun makeAllDue(): Int { val p = rows.value.values.filter { it.syncState != SyncState.SYNCED }; p.forEach { update(it.copy(nextAttemptAt = 0)) }; return p.size }
+    override suspend fun resetInFlight(): Int { val p = rows.value.values.filter { it.syncState == SyncState.SYNCING }; p.forEach { update(it.copy(syncState = SyncState.PENDING)) }; return p.size }
     override suspend fun delete(id: String) { rows.value = rows.value - id }
 }
 
@@ -70,7 +71,7 @@ class CaptureRepositoryTest {
     @Test fun serverResultsUpdateState() = runTest {
         val a = (repo.save(reel, null) as CaptureRepository.SaveOutcome.Saved).capture
         val b = (repo.save("no link", null) as CaptureRepository.SaveOutcome.Saved).capture
-        repo.applyResults(listOf(
+        repo.applyResults(listOf(a, b), listOf(
             CaptureResult(a.captureId, "duplicate", "idea1", null),
             CaptureResult(b.captureId, "invalid", null, "no http(s) URL"),
         ))
@@ -88,16 +89,43 @@ class CaptureRepositoryTest {
         assertEquals(10_000 + Backoff.delayMs(0), row.nextAttemptAt)
         assertTrue(repo.due(now = 10_000).isEmpty())
         assertEquals(1, repo.due(now = 10_000 + Backoff.delayMs(0)).size)
-        repeat(Backoff.MAX_ATTEMPTS_BEFORE_FAILED) { repo.markBatchFailed(listOf(dao.byId(c.captureId)!!), "unreachable", permanent = false) }
+        repeat(Backoff.MAX_ATTEMPTS_BEFORE_FAILED) { repo.markBatchFailed(listOf(dao.byId(c.captureId)!!), "unreachable", permanent = false, now = 20_000) }
         row = dao.byId(c.captureId)!!
         assertEquals(SyncState.FAILED, row.syncState)
+        assertEquals(false, row.permanent)
+        // never abandoned: still due again after the long backoff, without any user action
+        assertTrue(repo.due(now = 20_000).isEmpty())
+        assertEquals(1, repo.due(now = 20_000 + Backoff.MAX_MS).size)
         assertEquals(1, repo.retryFailed())
         assertEquals(SyncState.PENDING, dao.byId(c.captureId)!!.syncState)
     }
 
-    @Test fun permanentRejectionFailsImmediately() = runTest {
+    @Test fun partialAcknowledgementKeepsUnansweredItemsPending() = runTest {
+        val a = (repo.save("https://instagram.com/reel/P1", null) as CaptureRepository.SaveOutcome.Saved).capture
+        val b = (repo.save("https://instagram.com/reel/P2", null) as CaptureRepository.SaveOutcome.Saved).capture
+        repo.markSyncing(listOf(a, b))
+        assertEquals(SyncState.SYNCING, dao.byId(a.captureId)!!.syncState)
+        repo.applyResults(listOf(a, b), listOf(CaptureResult(a.captureId, "created", "i1", null)))
+        assertEquals(SyncState.SYNCED, dao.byId(a.captureId)!!.syncState)
+        assertEquals(SyncState.PENDING, dao.byId(b.captureId)!!.syncState)
+        assertEquals(1, repo.due().size)
+    }
+
+    @Test fun crashMidRequestLeavesRowsResendable() = runTest {
+        val a = (repo.save("https://instagram.com/reel/C1", null) as CaptureRepository.SaveOutcome.Saved).capture
+        repo.markSyncing(listOf(a))
+        assertEquals(1, repo.due().size)  // 'syncing' rows are due again after a restart
+        assertEquals(1, repo.resetInFlight())
+        assertEquals(SyncState.PENDING, dao.byId(a.captureId)!!.syncState)
+    }
+
+    @Test fun permanentRejectionFailsImmediatelyAndIsNotAutoRetried() = runTest {
         val c = (repo.save(reel, null) as CaptureRepository.SaveOutcome.Saved).capture
         repo.markBatchFailed(listOf(c), "token rejected", permanent = true)
-        assertEquals(SyncState.FAILED, dao.byId(c.captureId)!!.syncState)
+        val row = dao.byId(c.captureId)!!
+        assertEquals(SyncState.FAILED, row.syncState); assertTrue(row.permanent)
+        assertTrue(repo.due(now = System.currentTimeMillis() + Backoff.MAX_MS * 10).isEmpty())
+        assertEquals(1, repo.retryFailed())  // after fixing settings
+        assertEquals(1, repo.due().size)
     }
 }

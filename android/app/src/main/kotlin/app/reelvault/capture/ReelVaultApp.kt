@@ -14,5 +14,6 @@ class ReelVaultApp : Application() {
     override fun onCreate() {
         super.onCreate()
         if (prefs.autoSync) SyncScheduler.ensurePeriodic(this)
+        app.reelvault.capture.share.Shortcuts.publish(this)
     }
 }

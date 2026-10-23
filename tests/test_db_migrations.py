@@ -1,3 +1,4 @@
+from pathlib import Path
 import sqlite3
 
 from reelvault.db import MIGRATIONS, Database
@@ -32,7 +33,7 @@ def test_incremental_migration_from_older_version(tmp_path):
     assert db.current_version() == 2
     cols = {r[1] for r in conn.execute("PRAGMA table_info(ideas)")}
     assert "duplicate_of" not in cols
-    assert db.migrate() == [3]
+    assert db.migrate() == [m[0] for m in MIGRATIONS if m[0] >= 3]
     cols = {r[1] for r in conn.execute("PRAGMA table_info(ideas)")}
     assert "duplicate_of" in cols
     db.close()
@@ -58,4 +59,43 @@ def test_settings_roundtrip(tmp_path):
     assert db.get_setting("lan_enabled") is True
     assert db.get_setting("priorities") == ["A", "B"]
     assert "pairing_token" not in db.all_settings()
+    db.close()
+
+
+def test_v1_database_upgrades_and_rolls_back(tmp_path):
+    """Build a real v1 (schema 3) database with data, migrate to latest, verify data, roll back."""
+    from reelvault.db import _split_sql, utcnow
+    import subprocess, sys
+    data = tmp_path / "data"; data.mkdir()
+    db = Database(data / "reelvault.db")
+    conn = db.connection()
+    conn.execute("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
+    for version, name, action in MIGRATIONS[:3]:
+        conn.execute("BEGIN")
+        if callable(action):
+            action(conn)
+        else:
+            for stmt in _split_sql(action):
+                conn.execute(stmt)
+        conn.execute("INSERT INTO schema_migrations VALUES (?,?,?)", (version, name, utcnow()))
+        conn.execute("COMMIT")
+    conn.execute("INSERT INTO ideas(id, original_url, normalized_url, title, captured_at, created_at, updated_at) VALUES ('i1','https://a/b','https://a/b','keep me',?,?,?)", (utcnow(),)*3)
+    conn.execute("INSERT INTO trips(id, name, created_at, updated_at) VALUES ('t1','Udaipur',?,?)", (utcnow(),)*2)
+    conn.execute("INSERT INTO idea_trips VALUES ('i1','t1',?)", (utcnow(),))
+    db.close()
+    tool = str(Path(__file__).resolve().parent.parent / "tools" / "upgrade_db.py")
+    out = subprocess.run([sys.executable, tool, "migrate", "--data-dir", str(data)], capture_output=True, text=True)
+    assert "schema 3 ->" in out.stdout, out.stdout + out.stderr
+    db = Database(data / "reelvault.db")
+    assert db.current_version() == MIGRATIONS[-1][0]
+    row = db.connection().execute("SELECT title, tags_json, pipeline_stage FROM ideas WHERE id='i1'").fetchone()
+    assert row["title"] == "keep me" and row["tags_json"] == "[]" and row["pipeline_stage"] == "idle"
+    assert db.connection().execute("SELECT COUNT(*) FROM idea_trips").fetchone()[0] == 1
+    db.close()
+    backup = next((data / "backups").glob("pre-v2-*.db"))
+    out = subprocess.run([sys.executable, tool, "rollback", "--data-dir", str(data), "--backup", str(backup)], capture_output=True, text=True)
+    assert "restored" in out.stdout, out.stdout + out.stderr
+    db = Database(data / "reelvault.db")
+    assert db.current_version() == 3
+    assert db.connection().execute("SELECT title FROM ideas WHERE id='i1'").fetchone()[0] == "keep me"
     db.close()

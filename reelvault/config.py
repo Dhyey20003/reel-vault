@@ -33,7 +33,7 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "priorities": DEFAULT_PRIORITIES,
     "metadata_providers": ["ytdlp", "oembed"],
     "metadata_auto": True,
-    "ai_provider": "anthropic",
+    "ai_provider": "ollama",
     "ai_model": "claude-opus-5-5",
     "ai_frames": 4,                     # frames extracted from a local reference (0 = none)
     "reminders_enabled": False,
@@ -42,6 +42,22 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "ffmpeg_path": "",
     "instagram_oembed_token": "",       # optional Facebook Graph token for the official oEmbed endpoint
     "resolve_scripting_path": "",
+    # v2
+    "advertised_host": "",              # LAN address shown in the pairing QR; empty = auto-detect
+    "download_quality": "best",         # best | 1080p | 720p | 480p
+    "auto_download": False,             # pipeline: download after a capture syncs
+    "auto_analyze": False,              # pipeline: analyze after download (local AI only)
+    "pipeline_paused": False,
+    "pipeline_concurrency": 1,
+    "min_free_gb": 2,                   # refuse downloads/conversions below this free space
+    "ollama_url": "http://127.0.0.1:11434",
+    "ollama_model": "qwen2.5vl:7b",
+    "ollama_timeout": 600,
+    "ollama_num_ctx": 8192,
+    "ai_max_frames": 8,
+    "ai_transcribe": True,              # use a local whisper CLI when found
+    "whisper_path": "",
+    "cloud_ai_opt_in": False,           # the Anthropic provider only runs when this is explicitly on
 }
 
 

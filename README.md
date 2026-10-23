@@ -1,4 +1,19 @@
-# ReelVault
+# ReelVault 2.0
+
+**New in v2:** a playable creative gallery (grid and vertical feed, in-app player with A–B loops and timestamped notes), validated video+audio downloads, local video import, bulk links, creative tags, one-tap trip assignment, "Adapt for my trip", local AI through Ollama (no cloud needed), an automation pipeline, a repair centre, a faster Android share flow and fixed QR pairing. Upgrading from v1: `docs/UPGRADE_V2.md`. Full list: `CHANGELOG.md`.
+
+## Your first reel in ten steps (v2)
+1. Upgrade or install: `bash scripts/upgrade_v2.sh` (existing v1) or `bash scripts/setup.sh` (fresh), then `bash scripts/run_server.sh`. Windows: the matching `.bat` files.
+2. Settings > tick **LAN access**, choose your WiFi address under **Advertised host** if several are listed, Save, restart the server.
+3. Build and install the APK (`scripts/build_apk.sh` or `.bat`) over the old one; open ReelVault on the phone > Settings > **Scan pairing QR**. The card must say "Connected".
+4. In Instagram: Share > **Save to ReelVault** (pin it in the share sheet once). You stay in Instagram.
+5. On the PC the idea appears in **Inbox** within seconds (phone Sync tab shows "synced").
+6. Install yt-dlp and ffmpeg once (`brew install yt-dlp ffmpeg`), open the idea > **Download reference**. The player appears when the file is verified.
+7. Play, seek, set **A** and **B** to loop the part you want to study, press **N** to drop a timestamped note.
+8. Give it a title, a short note and tags; click **+ Trip** to put it in Udaipur (or create the trip inline).
+9. Local AI: `bash scripts/local_ai/setup_ollama_mac.sh`, Settings > **Test local AI**, then **Analyze** on the idea. Everything stays on your machine.
+10. On the trip page: **Adapt for my trip** with your gear and time, edit the plan, **Shot list** or **Export folder** when you leave.
+
 
 Capture Instagram Reels on your Android phone with one tap, sync them over your home WiFi to a workspace on your computer (Windows or macOS), and organize, annotate, download references, analyze and track each idea from **To Make** to **Published**.
 

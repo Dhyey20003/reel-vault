@@ -11,26 +11,29 @@
 <div id="app">
   <aside id="sidebar">
     <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>ReelVault</span></div>
-    <nav id="nav">
+    <nav id="nav" aria-label="Main">
       <a href="#/inbox" data-route="inbox">Inbox <span class="count" data-count="inbox"></span></a>
-      <a href="#/all" data-route="all">All Ideas <span class="count" data-count="all"></span></a>
-      <a href="#/trips" data-route="trips">Trips &amp; Projects <span class="count" data-count="trips"></span></a>
+      <a href="#/all" data-route="all">Library <span class="count" data-count="all"></span></a>
+      <a href="#/trips" data-route="trips">Trips <span class="count" data-count="trips"></span></a>
       <a href="#/priority" data-route="priority">Priority <span class="count" data-count="high"></span></a>
       <a href="#/published" data-route="published">Published <span class="count" data-count="published"></span></a>
+      <a href="#/repair" data-route="repair">Repair centre</a>
       <a href="#/settings" data-route="settings">Settings</a>
     </nav>
     <div class="sidebar-footer">
-      <button class="btn small" id="btn-add-idea">+ Add idea by link</button>
+      <button class="btn primary" id="btn-add">+ Add</button>
       <div id="server-info" class="muted small"></div>
     </div>
   </aside>
   <main id="main">
-    <div id="reminder-banner" class="banner hidden"></div>
+    <div id="reminder-banner" class="banner hidden" role="status"></div>
     <div id="view"></div>
   </main>
 </div>
-<div id="toasts"></div>
-<div id="modal" class="hidden"><div class="modal-card" id="modal-card"></div></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="modal" class="hidden" role="dialog"><div class="modal-card" id="modal-card"></div></div>
+<div id="overlay" class="hidden" role="dialog" aria-label="Idea details"><div class="sheet" id="sheet"></div></div>
+<script src="/static/player.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

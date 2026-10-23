@@ -41,6 +41,7 @@ class CreativeBrief(BaseModel):
     production_requirements: list[str] = Field(default_factory=list)
     recreation_plan: str = ""
     personal_notes: str = ""
+    uncertain_interpretations: list[str] = Field(default_factory=list, description="Readings that are plausible but not certain from the inputs")
     confidence_note: str = Field(default="", description="What was and was not available to the model")
 
 
@@ -54,13 +55,16 @@ class AnalysisInputs:
     transcript: str = ""
     frames: list[Path] = field(default_factory=list)
     screenshots: list[Path] = field(default_factory=list)
+    frame_times: list[float] = field(default_factory=list)
+    transcript_source: str = ""
 
     def summary(self) -> dict[str, Any]:
         return {
             "url": True, "title": bool(self.title), "creator": bool(self.creator), "caption": bool(self.caption),
             "notes": bool(self.notes), "transcript": bool(self.transcript),
             "frames": len(self.frames), "screenshots": len(self.screenshots),
-            "video_watched": False,
+            "frame_times": [round(t, 1) for t in self.frame_times], "transcript_source": self.transcript_source,
+            "video_watched": False, "audio_heard": False,
         }
 
 
@@ -172,9 +176,16 @@ def parse_brief(text: str) -> CreativeBrief:
         raise AnalysisError(f"The AI reply did not match the brief schema: {str(e)[:200]}") from e
 
 
-def build_provider(name: str, api_key: str | None) -> AnalysisProvider:
+def build_provider(name: str, api_key: str | None, settings: dict[str, Any] | None = None) -> AnalysisProvider:
+    settings = settings or {}
+    if name == "ollama":
+        from .local_ai import OllamaProvider
+        return OllamaProvider(settings.get("ollama_url") or "http://127.0.0.1:11434", int(settings.get("ollama_timeout") or 600),
+                              int(settings.get("ollama_num_ctx") or 8192))
     if name != "anthropic":
-        raise NotConfigured(f"Unknown AI provider '{name}'. Supported: anthropic")
+        raise NotConfigured(f"Unknown AI provider '{name}'. Supported: ollama (local), anthropic (cloud, opt-in)")
+    if not settings.get("cloud_ai_opt_in"):
+        raise NotConfigured("The Anthropic cloud provider is off. Local AI (Ollama) is the default; it is opt-in: enable 'cloud_ai_opt_in' in Settings to use the cloud provider.")
     if not api_key:
         raise NotConfigured(
             "No AI API key configured. Set the REELVAULT_AI_API_KEY (or ANTHROPIC_API_KEY) environment variable, "
@@ -201,6 +212,8 @@ def brief_to_markdown(brief: dict[str, Any], title: str = "") -> str:
                        ("Sound design", b.sound_design)):
         if val:
             lines += [f"## {label}", val, ""]
+    if b.uncertain_interpretations:
+        lines += ["## Uncertain interpretations"] + [f"- {u}" for u in b.uncertain_interpretations] + [""]
     if b.production_requirements:
         lines += ["## Production requirements"] + [f"- {r}" for r in b.production_requirements] + [""]
     for label, val in (("Recreation plan", b.recreation_plan), ("Personal notes", b.personal_notes),
@@ -208,3 +221,22 @@ def brief_to_markdown(brief: dict[str, Any], title: str = "") -> str:
         if val:
             lines += [f"## {label}", val, ""]
     return "\n".join(lines).rstrip() + "\n"
+
+
+class PlannedShot(BaseModel):
+    shot: str
+    description: str = ""
+    location_hint: str = ""
+    duration_seconds: float | None = None
+    gear: str = ""
+
+
+class TripPlan(BaseModel):
+    """'Adapt for my trip' output. observed_from_references is copied from analyses; everything else is a proposal."""
+    observed_from_references: list[str] = Field(default_factory=list)
+    proposed_shots: list[PlannedShot] = Field(default_factory=list)
+    schedule: list[str] = Field(default_factory=list)
+    recreation_plan: str = ""
+    gear_checklist: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    notes: str = ""

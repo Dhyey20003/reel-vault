@@ -79,13 +79,24 @@ def put_settings(body: SettingsIn, request: Request) -> dict[str, Any]:
 def pairing(request: Request) -> dict[str, Any]:
     w = ws(request)
     import segno
-    ip = lan_ip() or "127.0.0.1"
+    from urllib.parse import quote
+    info = w.lan_info()
+    ip = info["advertised_host"]
     port = request.app.state.port
     token = w.db.pairing_token()
-    uri = f"reelvault://pair?host={ip}&port={port}&token={token}"
+    warnings = []
+    if not ip:
+        warnings.append("No private LAN address found on this computer. Connect to WiFi/Ethernet, or type the address under Advertised host.")
+        ip = "127.0.0.1"
+    if not request.app.state.lan_enabled:
+        warnings.append("LAN access is OFF: the phone cannot connect until you enable it in Settings and restart ReelVault.")
+    chosen = next((c for c in info["candidates"] if c["ip"] == ip), None)
+    if chosen and chosen.get("virtual"):
+        warnings.append(f"{ip} looks like a virtual/VPN adapter ({chosen['reason']}); pick your WiFi address under Advertised host.")
+    uri = f"reelvault://pair?host={quote(ip)}&port={port}&token={quote(token, safe='')}"
     svg = segno.make(uri, error="m").svg_inline(scale=5, border=2, dark="#111", light=None)
-    return {"host": ip, "port": port, "token": token, "uri": uri, "qr_svg": svg,
-            "lan_enabled_running": request.app.state.lan_enabled}
+    return {"host": ip, "port": port, "token": token, "uri": uri, "qr_svg": svg, "warnings": warnings,
+            "candidates": info["candidates"], "lan_enabled_running": request.app.state.lan_enabled}
 
 
 @router.post("/pairing/rotate")
@@ -156,11 +167,12 @@ class IdeaUpdate(BaseModel):
 def list_ideas(request: Request, q: str = "", status: str | None = None, priority: str | None = None,
                category_id: str | None = None, trip_id: str | None = None, inbox: bool = False,
                download_status: str | None = None, captured_from: str | None = None, captured_to: str | None = None,
-               sort: str = "captured_at", order: str = "desc", limit: int = Query(500, le=2000), offset: int = 0) -> dict[str, Any]:
+               sort: str = "captured_at", order: str = "desc", limit: int = Query(500, le=2000), offset: int = 0,
+               tag: str | None = None, playable: bool = False) -> dict[str, Any]:
     w = ws(request)
     items = w.repo.list_ideas(q=q, status=status, priority=priority, category_id=category_id, trip_id=trip_id, inbox=inbox,
                               download_status=download_status, captured_from=captured_from, captured_to=captured_to,
-                              sort=sort, order=order, limit=limit, offset=offset)
+                              sort=sort, order=order, limit=limit, offset=offset, tag=tag, playable=playable)
     return {"items": items, "count": len(items), "counts": w.repo.counts()}
 
 
@@ -174,8 +186,8 @@ def create_idea(body: IdeaCreate, request: Request) -> dict[str, Any]:
                                            allow_duplicate=body.allow_duplicate)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    if created and w.setting("metadata_auto", True):
-        w.queue_metadata(idea["id"])
+    if created:
+        w.on_capture_synced(idea["id"])
     return {"idea": idea, "created": created}
 
 
@@ -247,9 +259,9 @@ def verify_download(idea_id: str, request: Request) -> dict[str, Any]:
 
 
 @router.post("/ideas/{idea_id}/analyze")
-def analyze(idea_id: str, request: Request) -> dict[str, Any]:
+def analyze(idea_id: str, request: Request, force: bool = False) -> dict[str, Any]:
     try:
-        return ws(request).queue_analysis(idea_id)
+        return ws(request).queue_analysis(idea_id, force=force)
     except KeyError as e:
         raise _404("Idea not found") from e
 
@@ -279,9 +291,12 @@ def analysis_markdown(idea_id: str, request: Request) -> str:
 @router.get("/ideas/{idea_id}/thumbnail")
 def thumbnail(idea_id: str, request: Request) -> Response:
     idea = ws(request).repo.idea(idea_id)
-    if not idea or not idea.get("thumbnail_path") or not Path(idea["thumbnail_path"]).is_file():
-        raise _404("No thumbnail")
-    return FileResponse(idea["thumbnail_path"])
+    if not idea:
+        raise _404("Idea not found")
+    for key in ("cover_path", "thumbnail_path"):
+        if idea.get(key) and Path(idea[key]).is_file():
+            return FileResponse(idea[key])
+    raise _404("No thumbnail")
 
 
 @router.post("/ideas/{idea_id}/attachments", status_code=201)
